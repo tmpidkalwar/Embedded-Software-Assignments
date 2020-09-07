@@ -13,10 +13,14 @@ static void create_blinky_tasks(void);
 static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
+static void task_one(void *task_parameter);
+static void task_two(void *task_parameter);
 
 int main(void) {
   create_blinky_tasks();
   create_uart_task();
+  xTaskCreate(task_one, "task1", 12U * 8, NULL, PRIORITY_LOW, NULL);
+  xTaskCreate(task_two, "task2", 12U * 8, NULL, PRIORITY_LOW, NULL);
 
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
@@ -96,5 +100,23 @@ static void uart_task(void *params) {
     ticks = xTaskGetTickCount();
     printf("This is a more efficient printf ... finished in");
     printf(" %lu ticks\n\n", (xTaskGetTickCount() - ticks));
+  }
+}
+
+static void task_one(void *task_parameter) {
+  while (true) {
+    // Read existing main.c regarding when we should use fprintf(stderr...) in place of printf()
+    // For this lab, we will use fprintf(stderr, ...)
+    fprintf(stderr, "AAAAAAAAAAAA");
+
+    // Sleep for 100ms
+    vTaskDelay(100);
+  }
+}
+
+static void task_two(void *task_parameter) {
+  while (true) {
+    fprintf(stderr, "bbbbbbbbbbbb");
+    vTaskDelay(100);
   }
 }
