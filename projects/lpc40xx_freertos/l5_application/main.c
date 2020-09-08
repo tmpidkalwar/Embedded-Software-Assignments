@@ -17,12 +17,12 @@ static void task_one(void *task_parameter);
 static void task_two(void *task_parameter);
 
 int main(void) {
-  create_blinky_tasks();
-  create_uart_task();
-  xTaskCreate(task_one, "task1", 12U * 8, NULL, PRIORITY_LOW, NULL);
-  xTaskCreate(task_two, "task2", 12U * 8, NULL, PRIORITY_LOW, NULL);
+  // create_blinky_tasks();
+  // create_uart_task();
+  xTaskCreate(task_one, "task1", configMINIMAL_TASK_ONE_TWO_STACK_SIZE, NULL, PRIORITY_LOW, NULL);
+  xTaskCreate(task_two, "task2", configMINIMAL_TASK_ONE_TWO_STACK_SIZE, NULL, PRIORITY_MEDIUM, NULL);
 
-  puts("Starting RTOS");
+  // puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
 
   return 0;
