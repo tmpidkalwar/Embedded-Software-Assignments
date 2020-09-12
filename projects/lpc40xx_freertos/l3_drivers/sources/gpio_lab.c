@@ -10,37 +10,42 @@
 
 #include "lpc40xx.h"
 
-void gpio0__set_as_input(uint8_t pin_num) { LPC_GPIO0->DIR &= ~(1 << pin_num); }
+/**
+ * array of pointer ro GPIO ports' base addresses
+ */
+static LPC_GPIO_TypeDef *gpio_lab_port_memory_map[] = {LPC_GPIO0, LPC_GPIO1, LPC_GPIO2,
+                                                       LPC_GPIO3, LPC_GPIO4, LPC_GPIO5};
 
-void gpio0__set_as_output(uint8_t pin_num) { LPC_GPIO0->DIR |= (1 << pin_num); }
+/**
+ * Retruns the pointer to an base address of an given port
+ * @param gpio GPIO structure of which base address we need
+ * @return (LPC_GPIO_TypeDef *) pointer to the base address of given port
+ */
+static LPC_GPIO_TypeDef *gpio_lab_get_struct(gpio_lab_s gpio) {
+  return (LPC_GPIO_TypeDef *)gpio_lab_port_memory_map[gpio.port_number];
+}
 
-void gpio0__set_high(uint8_t pin_num) { LPC_GPIO0->SET = (1 << pin_num); }
+/**
+ * Retruns the pin masked value for the given GPIO
+ * @param gpio GPIO structure of which base address we need
+ * @return pin masked value for the given GPIO
+ */
+static uint32_t gpio_lab_get_pin_mask(gpio_lab_s gpio) { return (1 << gpio.pin_number); }
 
-void gpio0__set_low(uint8_t pin_num) { LPC_GPIO0->CLR = (1 << pin_num); }
+void gpio_lab_set_as_input(gpio_lab_s gpio) { gpio_lab_get_struct(gpio)->DIR &= ~gpio_lab_get_pin_mask(gpio); }
 
-void gpio0__set(uint8_t pin_num, bool high) {
+void gpio_lab_set_as_output(gpio_lab_s gpio) { gpio_lab_get_struct(gpio)->DIR |= gpio_lab_get_pin_mask(gpio); }
+
+void gpio_lab_set_high(gpio_lab_s gpio) { gpio_lab_get_struct(gpio)->SET = gpio_lab_get_pin_mask(gpio); }
+
+void gpio_lab_set_low(gpio_lab_s gpio) { gpio_lab_get_struct(gpio)->CLR = gpio_lab_get_pin_mask(gpio); }
+
+void gpio_lab_set(gpio_lab_s gpio, bool high) {
   // based on the high bit's input value manipulate GPIO PIN.
   if (high)
-    LPC_GPIO0->SET = (1 << pin_num);
+    gpio_lab_get_struct(gpio)->SET = gpio_lab_get_pin_mask(gpio);
   else
-    LPC_GPIO0->CLR = (1 << pin_num);
+    gpio_lab_get_struct(gpio)->CLR = gpio_lab_get_pin_mask(gpio);
 }
 
-bool gpio0__get_level(uint8_t pin_num) { return (LPC_GPIO0->PIN & (1 << pin_num)); }
-
-void gpio1__set_as_input(uint8_t pin_num) { LPC_GPIO1->DIR &= ~(1 << pin_num); }
-
-void gpio1__set_as_output(uint8_t pin_num) { LPC_GPIO1->DIR |= (1 << pin_num); }
-
-void gpio1__set_high(uint8_t pin_num) { LPC_GPIO1->SET = (1 << pin_num); }
-
-void gpio1__set_low(uint8_t pin_num) { LPC_GPIO1->CLR = (1 << pin_num); }
-
-void gpio1__set(uint8_t pin_num, bool high) {
-  if (high)
-    LPC_GPIO1->SET = (1 << pin_num);
-  else
-    LPC_GPIO1->CLR = (1 << pin_num);
-}
-
-bool gpio1__get_level(uint8_t pin_num) { return (LPC_GPIO1->PIN & (1 << pin_num)); }
+bool gpio_lab_get_level(gpio_lab_s gpio) { return (gpio_lab_get_struct(gpio)->PIN & gpio_lab_get_pin_mask(gpio)); }

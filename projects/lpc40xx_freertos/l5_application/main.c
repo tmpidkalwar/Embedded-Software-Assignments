@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "FreeRTOS.h"
+#include "semphr.h"
 #include "task.h"
 
 #include "board_io.h"
@@ -10,45 +11,73 @@
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
 
+/**
+ * Local Functions
+ */
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
 
-typedef struct {
-  /* First get gpio0 driver to work only, and if you finish it
-   * you can do the extra credit to also make it work for other Ports
-   */
-  // uint8_t port;
+/**
+ * Local Variables
+ */
+static SemaphoreHandle_t switch_press_indication;
 
-  uint8_t pin;
-} port_pin_s;
-
-void led_task(void *task_parameter) {
+static void led_task(void *task_parameter) {
   // Type-cast the parameter that was passed from xTaskCreate()
-  const port_pin_s *led = (port_pin_s *)(task_parameter);
-
-  // Set the given pin as output
-  // gpio1__set_as_output(led->pin);
+  const gpio_lab_s led = *((gpio_lab_s *)task_parameter);
 
   while (true) {
-    // Turn on the LED0
-    gpio1__set_high(led->pin);
-    vTaskDelay(100);
+    // Check every 1000ms whether semaphore is available. Other time FreeRTOS make this task sleep
+    if (xSemaphoreTake(switch_press_indication, 1000)) {
+      // Turn on the LEDs
+      gpio_lab_set_high(led);
+      vTaskDelay(400);
+      // Turn off the LEDs
+      gpio_lab_set_low(led);
+      vTaskDelay(400);
+    } else {
+      puts("Timeout: No switch press indication for 1000ms");
+    }
+  }
+}
 
-    gpio1__set_low(led->pin);
+static void switch_task(void *task_parameter) {
+  // Type-cast the paramter that was passed from xTaskCreate()
+  const gpio_lab_s switch3 = *((gpio_lab_s *)task_parameter);
+
+  while (true) {
+    if (gpio_lab_get_level(switch3)) {
+      // Release the semaphore when the switch is pressed
+      if (!xSemaphoreGive(switch_press_indication))
+        puts("Unable to release the semaphore");
+    }
+    // Task should always sleep otherwise they will use 100% CPU
+    // This task sleep also helps avoid spurious semaphore give during switch debeounce
     vTaskDelay(100);
   }
 }
 
 int main(void) {
 
-  // Select LED3 and LED2 connected to port1 pin 18 and 24 respectively
-  static port_pin_s led0 = {18};
-  static port_pin_s led1 = {24};
+  switch_press_indication = xSemaphoreCreateBinary();
 
-  xTaskCreate(led_task, "led0", 2048 / sizeof(void *), (void *)&led0, PRIORITY_LOW, NULL);
-  xTaskCreate(led_task, "led1", 2048 / sizeof(void *), (void *)&led1, PRIORITY_LOW, NULL);
+  // Select LED3 and LED2 connected to port1 pin 18 and 24 respectively
+  static gpio_lab_s gpio_led3 = {1, 18};
+  static gpio_lab_s gpio_led2 = {1, 24};
+  static gpio_lab_s gpio_led1 = {1, 26};
+  static gpio_lab_s gpio_led0 = {2, 3};
+
+  xTaskCreate(led_task, "led3", 2048 / sizeof(void *), (void *)&gpio_led3, PRIORITY_CRITICAL, NULL);
+  xTaskCreate(led_task, "led2", 2048 / sizeof(void *), (void *)&gpio_led2, PRIORITY_HIGH, NULL);
+  xTaskCreate(led_task, "led1", 2048 / sizeof(void *), (void *)&gpio_led1, PRIORITY_MEDIUM, NULL);
+  xTaskCreate(led_task, "led0", 2048 / sizeof(void *), (void *)&gpio_led0, PRIORITY_LOW, NULL);
+
+  // Select Switch3 connected to port0 pin 29 and 24 respectively
+  static gpio_lab_s gpio_switch3 = {0, 29};
+
+  xTaskCreate(switch_task, "switch3", 2048 / sizeof(void *), (void *)&gpio_switch3, PRIORITY_CRITICAL, NULL);
 
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
