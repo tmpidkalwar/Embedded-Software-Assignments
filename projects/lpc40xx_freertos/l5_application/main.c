@@ -14,9 +14,26 @@ static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
 
+void led_port1_wire18_Task(void *pvParameters) {
+  const uint32_t led = (1 << 18);
+  // Set the IOCON mux fucntion select pins to 000
+  LPC_IOCON->P1_18 &= ~(0x7);
+
+  // Set the DIR register's bit corresponding to LED 0
+  LPC_GPIO1->DIR |= led;
+
+  while (true) {
+    // Turn on the LED0
+    LPC_GPIO1->SET = led;
+    vTaskDelay(100);
+    LPC_GPIO1->CLR = led;
+    vTaskDelay(100);
+  }
+}
+
 int main(void) {
-  create_blinky_tasks();
-  create_uart_task();
+
+  xTaskCreate(led_port1_wire18_Task, "led0", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
 
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
