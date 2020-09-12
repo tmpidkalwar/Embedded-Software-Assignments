@@ -6,6 +6,7 @@
 #include "board_io.h"
 #include "common_macros.h"
 #include "gpio.h"
+#include "gpio_lab.h"
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
 
@@ -14,26 +15,40 @@ static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
 
-void led_port1_wire18_Task(void *pvParameters) {
-  const uint32_t led = (1 << 18);
-  // Set the IOCON mux fucntion select pins to 000
-  LPC_IOCON->P1_18 &= ~(0x7);
+typedef struct {
+  /* First get gpio0 driver to work only, and if you finish it
+   * you can do the extra credit to also make it work for other Ports
+   */
+  // uint8_t port;
 
-  // Set the DIR register's bit corresponding to LED 0
-  LPC_GPIO1->DIR |= led;
+  uint8_t pin;
+} port_pin_s;
+
+void led_task(void *task_parameter) {
+  // Type-cast the parameter that was passed from xTaskCreate()
+  const port_pin_s *led = (port_pin_s *)(task_parameter);
+
+  // Set the given pin as output
+  // gpio1__set_as_output(led->pin);
 
   while (true) {
     // Turn on the LED0
-    LPC_GPIO1->SET = led;
+    gpio1__set_high(led->pin);
     vTaskDelay(100);
-    LPC_GPIO1->CLR = led;
+
+    gpio1__set_low(led->pin);
     vTaskDelay(100);
   }
 }
 
 int main(void) {
 
-  xTaskCreate(led_port1_wire18_Task, "led0", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+  // Select LED3 and LED2 connected to port1 pin 18 and 24 respectively
+  static port_pin_s led0 = {18};
+  static port_pin_s led1 = {24};
+
+  xTaskCreate(led_task, "led0", 2048 / sizeof(void *), (void *)&led0, PRIORITY_LOW, NULL);
+  xTaskCreate(led_task, "led1", 2048 / sizeof(void *), (void *)&led1, PRIORITY_LOW, NULL);
 
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails

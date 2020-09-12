@@ -27,3 +27,20 @@ void gpio0__set(uint8_t pin_num, bool high) {
 }
 
 bool gpio0__get_level(uint8_t pin_num) { return (LPC_GPIO0->PIN & (1 << pin_num)); }
+
+void gpio1__set_as_input(uint8_t pin_num) { LPC_GPIO1->DIR &= ~(1 << pin_num); }
+
+void gpio1__set_as_output(uint8_t pin_num) { LPC_GPIO1->DIR |= (1 << pin_num); }
+
+void gpio1__set_high(uint8_t pin_num) { LPC_GPIO1->SET = (1 << pin_num); }
+
+void gpio1__set_low(uint8_t pin_num) { LPC_GPIO1->CLR = (1 << pin_num); }
+
+void gpio1__set(uint8_t pin_num, bool high) {
+  if (high)
+    LPC_GPIO1->SET = (1 << pin_num);
+  else
+    LPC_GPIO1->CLR = (1 << pin_num);
+}
+
+bool gpio1__get_level(uint8_t pin_num) { return (LPC_GPIO1->PIN & (1 << pin_num)); }
