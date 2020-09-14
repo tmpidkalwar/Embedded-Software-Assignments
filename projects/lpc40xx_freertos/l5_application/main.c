@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "FreeRTOS.h"
+#include "queue.h"
 #include "semphr.h"
 #include "task.h"
 
@@ -10,6 +11,12 @@
 #include "gpio_lab.h"
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
+
+/**
+ * Local Macros
+ */
+#define INVALID_SWITCH 4
+#define MAX_LEDS 4
 
 /**
  * Local Functions
@@ -23,20 +30,33 @@ static void uart_task(void *params);
  * Local Variables
  */
 static SemaphoreHandle_t switch_press_indication;
+static volatile uint8_t led_index = 0;
 
 static void led_task(void *task_parameter) {
-  // Type-cast the parameter that was passed from xTaskCreate()
-  const gpio_lab_s led = *((gpio_lab_s *)task_parameter);
-
+  // Available LEDs served under this task
+  const gpio_lab_s led[] = {{1, 18}, {1, 24}, {1, 26}, {2, 3}};
   while (true) {
     // Check every 1000ms whether semaphore is available. Other time FreeRTOS make this task sleep
     if (xSemaphoreTake(switch_press_indication, 1000)) {
-      // Turn on the LEDs
-      gpio_lab_set_high(led);
-      vTaskDelay(400);
-      // Turn off the LEDs
-      gpio_lab_set_low(led);
-      vTaskDelay(400);
+      // Temperory variable to track remaining LEDs to be blinked
+      int temp = MAX_LEDS;
+
+      // This loop will turn on all LEDs starting led_index
+      while (temp) {
+        printf("led on index =%d \n", led_index);
+        gpio_lab_set_high(led[led_index++ % 4]);
+        vTaskDelay(100);
+        temp--;
+      }
+      temp = MAX_LEDS;
+
+      // This loop will turn off all LEDs starting led_index
+      while (temp) {
+        printf("led off index =%d \n", led_index);
+        gpio_lab_set_low(led[led_index++ % 4]);
+        vTaskDelay(100);
+        temp--;
+      }
     } else {
       puts("Timeout: No switch press indication for 1000ms");
     }
@@ -44,15 +64,63 @@ static void led_task(void *task_parameter) {
 }
 
 static void switch_task(void *task_parameter) {
-  // Type-cast the paramter that was passed from xTaskCreate()
-  const gpio_lab_s switch3 = *((gpio_lab_s *)task_parameter);
+  // Available switches served under this task
+  const gpio_lab_s switch_index[] = {{1, 19}, {1, 15}, {0, 30}, {0, 29}};
+  // Initialize the switch to be toggle to invalid switch
+  uint8_t toggle_switch = INVALID_SWITCH;
 
   while (true) {
-    if (gpio_lab_get_level(switch3)) {
-      // Release the semaphore when the switch is pressed
-      if (!xSemaphoreGive(switch_press_indication))
-        puts("Unable to release the semaphore");
+    // Monitor pressed switch for successful toggle
+    switch (toggle_switch) {
+    case 3:
+      if (!gpio_lab_get_level(switch_index[3])) {
+        toggle_switch = INVALID_SWITCH;
+        led_index = 0;
+        // Release the semaphore when the switch is successfully toggled
+        if (!xSemaphoreGive(switch_press_indication))
+          puts("Unable to release the semaphore");
+      }
+      break;
+    case 2:
+      if (!gpio_lab_get_level(switch_index[2])) {
+        toggle_switch = INVALID_SWITCH;
+        led_index = 1;
+        // Release the semaphore when the switch is successfully toggled
+        if (!xSemaphoreGive(switch_press_indication))
+          puts("Unable to release the semaphore");
+      }
+      break;
+    case 1:
+      if (!gpio_lab_get_level(switch_index[1])) {
+        toggle_switch = INVALID_SWITCH;
+        led_index = 2;
+        // Release the semaphore when the switch is successfully toggled
+        if (!xSemaphoreGive(switch_press_indication))
+          puts("Unable to release the semaphore");
+      }
+      break;
+    case 0:
+      if (!gpio_lab_get_level(switch_index[0])) {
+        toggle_switch = INVALID_SWITCH;
+        led_index = 3;
+        // Release the semaphore when the switch is successfully toggled
+        if (!xSemaphoreGive(switch_press_indication))
+          puts("Unable to release the semaphore");
+      }
+      break;
+    default:
+      break;
     }
+
+    // Monitor the pressed switch
+    if (gpio_lab_get_level(switch_index[3]))
+      toggle_switch = 3;
+    else if (gpio_lab_get_level(switch_index[2]))
+      toggle_switch = 2;
+    else if (gpio_lab_get_level(switch_index[1]))
+      toggle_switch = 1;
+    else if (gpio_lab_get_level(switch_index[0]))
+      toggle_switch = 0;
     // Task should always sleep otherwise they will use 100% CPU
     // This task sleep also helps avoid spurious semaphore give during switch debeounce
     vTaskDelay(100);
@@ -63,21 +131,8 @@ int main(void) {
 
   switch_press_indication = xSemaphoreCreateBinary();
 
-  // Select LED3 and LED2 connected to port1 pin 18 and 24 respectively
-  static gpio_lab_s gpio_led3 = {1, 18};
-  static gpio_lab_s gpio_led2 = {1, 24};
-  static gpio_lab_s gpio_led1 = {1, 26};
-  static gpio_lab_s gpio_led0 = {2, 3};
-
-  xTaskCreate(led_task, "led3", 2048 / sizeof(void *), (void *)&gpio_led3, PRIORITY_CRITICAL, NULL);
-  xTaskCreate(led_task, "led2", 2048 / sizeof(void *), (void *)&gpio_led2, PRIORITY_HIGH, NULL);
-  xTaskCreate(led_task, "led1", 2048 / sizeof(void *), (void *)&gpio_led1, PRIORITY_MEDIUM, NULL);
-  xTaskCreate(led_task, "led0", 2048 / sizeof(void *), (void *)&gpio_led0, PRIORITY_LOW, NULL);
-
-  // Select Switch3 connected to port0 pin 29 and 24 respectively
-  static gpio_lab_s gpio_switch3 = {0, 29};
-
-  xTaskCreate(switch_task, "switch3", 2048 / sizeof(void *), (void *)&gpio_switch3, PRIORITY_CRITICAL, NULL);
+  xTaskCreate(led_task, "led", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+  xTaskCreate(switch_task, "switch", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
 
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
