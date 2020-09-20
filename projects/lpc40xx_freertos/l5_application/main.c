@@ -13,6 +13,7 @@
 
 #include "delay.h"
 #include "lpc_peripherals.h"
+#include "semphr.h"
 
 #endif
 
@@ -23,16 +24,27 @@ static void uart_task(void *params);
 
 #ifdef INTERRUPT_ASSIGNMENT
 
+static SemaphoreHandle_t waitOnSemaphore;
+
 void gpio_interrupt(void) {
+  fprintf(stderr, "Switch is pressed\n");
+  if (!xSemaphoreGiveFromISR(waitOnSemaphore, NULL))
+    fprintf(stderr, "Unable to Release Semaphore");
   // Clear interrupt
   LPC_GPIOINT->IO0IntClr |= (1 << 30);
-  fprintf(stderr, "Switch is pressed\n");
-  static gpio_s led3;
-  led3 = board_io__get_led3();
-  int count = 4;
-  while (count--) {
-    delay__ms(100);
-    gpio__toggle(led3);
+}
+
+void sleep_on_sem_task(void *p) {
+  while (1) {
+    if (xSemaphoreTake(waitOnSemaphore, portMAX_DELAY)) {
+      static gpio_s led3;
+      led3 = board_io__get_led3();
+      int count = 4;
+      while (count--) {
+        delay__ms(100);
+        gpio__toggle(led3);
+      }
+    }
   }
 }
 
@@ -41,26 +53,35 @@ void gpio_interrupt(void) {
 int main(void) {
 
 #ifdef INTERRUPT_ASSIGNMENT
+
+  waitOnSemaphore = xSemaphoreCreateBinary();
+
+  static gpio_s switch2;
+  switch2 = board_io__get_sw2();
+
   // Set GPIO 0 Pin 30 as a input
-  LPC_GPIO0->DIR &= ~(1 << 30);
+  // gpio__set_as_input(switch2);
+
   LPC_GPIOINT->IO0IntEnR |= (1 << 30);
 
-  // lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio_interrupt, "gpio0");
+  lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio_interrupt, "gpio0");
 
   NVIC_EnableIRQ(GPIO_IRQn);
 
-  static gpio_s led2;
+  /** PART 0
+    static gpio_s led2;
 
-  led2 = board_io__get_led2();
-  while (1) {
-    delay__ms(100);
-    gpio__toggle(led2);
-  }
+    led2 = board_io__get_led2();
+    while (1) {
+      delay__ms(100);
+      gpio__toggle(led2);
+    } */
+  xTaskCreate(sleep_on_sem_task, "waitOnSem", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
 
-#endif
+#else
   create_blinky_tasks();
   create_uart_task();
-
+#endif
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
 
