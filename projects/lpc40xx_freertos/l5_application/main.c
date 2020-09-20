@@ -9,12 +9,55 @@
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
 
+#ifdef INTERRUPT_ASSIGNMENT
+
+#include "delay.h"
+#include "lpc_peripherals.h"
+
+#endif
+
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
 
+#ifdef INTERRUPT_ASSIGNMENT
+
+void gpio_interrupt(void) {
+  // Clear interrupt
+  LPC_GPIOINT->IO0IntClr |= (1 << 30);
+  fprintf(stderr, "Switch is pressed\n");
+  static gpio_s led3;
+  led3 = board_io__get_led3();
+  int count = 4;
+  while (count--) {
+    delay__ms(100);
+    gpio__toggle(led3);
+  }
+}
+
+#endif
+
 int main(void) {
+
+#ifdef INTERRUPT_ASSIGNMENT
+  // Set GPIO 0 Pin 30 as a input
+  LPC_GPIO0->DIR &= ~(1 << 30);
+  LPC_GPIOINT->IO0IntEnR |= (1 << 30);
+
+  // lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio_interrupt, "gpio0");
+
+  NVIC_EnableIRQ(GPIO_IRQn);
+
+  static gpio_s led2;
+
+  led2 = board_io__get_led2();
+  while (1) {
+    delay__ms(100);
+    gpio__toggle(led2);
+  }
+
+#endif
   create_blinky_tasks();
   create_uart_task();
 

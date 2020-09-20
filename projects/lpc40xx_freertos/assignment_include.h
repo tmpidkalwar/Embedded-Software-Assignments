@@ -1,0 +1,7 @@
+
+#ifndef _ASSIGNMENT_INCLUDE_
+#define _ASSIGNMENT_INCLUDE_
+
+#define INTERRUPT_ASSIGNMENT
+
+#endif
