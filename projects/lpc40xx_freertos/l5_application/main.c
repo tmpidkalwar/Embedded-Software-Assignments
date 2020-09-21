@@ -40,6 +40,7 @@ int main(void) {
 
   waitOnSemaphore = xSemaphoreCreateBinary();
 
+  // Initializing GPIO to switch 2 to configure for interrupt
   static gpio_s switch2;
   switch2 = board_io__get_sw2();
 
@@ -48,20 +49,10 @@ int main(void) {
 
   gpio0__attach_interrupt(switch2.pin_number, GPIO_INTR__FALLING_EDGE, gpio_interrupt);
 
-  // LPC_GPIOINT->IO0IntEnR |= (1 << 30);
-
-  lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio0__interrupt_dispatcher, "gpio0");
+  lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio__interrupt_dispatcher, "gpio_isr");
 
   NVIC_EnableIRQ(GPIO_IRQn);
 
-  /** PART 0
-    static gpio_s led2;
-
-    led2 = board_io__get_led2();
-    while (1) {
-      delay__ms(100);
-      gpio__toggle(led2);
-    } */
   xTaskCreate(sleep_on_sem_task, "waitOnSem", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
 
 #else
