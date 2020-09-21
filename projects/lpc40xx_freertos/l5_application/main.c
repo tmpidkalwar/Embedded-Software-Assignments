@@ -12,41 +12,25 @@
 #ifdef INTERRUPT_ASSIGNMENT
 
 #include "delay.h"
+#include "gpio_isr.h"
 #include "lpc_peripherals.h"
 #include "semphr.h"
 
 #endif
 
+#ifdef INTERRUPT_ASSIGNMENT
+
+static void gpio_interrupt(void);
+static void sleep_on_sem_task(void *p);
+
+static SemaphoreHandle_t waitOnSemaphore;
+
+#else
+
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
-
-#ifdef INTERRUPT_ASSIGNMENT
-
-static SemaphoreHandle_t waitOnSemaphore;
-
-void gpio_interrupt(void) {
-  fprintf(stderr, "Switch is pressed\n");
-  if (!xSemaphoreGiveFromISR(waitOnSemaphore, NULL))
-    fprintf(stderr, "Unable to Release Semaphore");
-  // Clear interrupt
-  LPC_GPIOINT->IO0IntClr |= (1 << 30);
-}
-
-void sleep_on_sem_task(void *p) {
-  while (1) {
-    if (xSemaphoreTake(waitOnSemaphore, portMAX_DELAY)) {
-      static gpio_s led3;
-      led3 = board_io__get_led3();
-      int count = 4;
-      while (count--) {
-        delay__ms(100);
-        gpio__toggle(led3);
-      }
-    }
-  }
-}
 
 #endif
 
@@ -60,11 +44,13 @@ int main(void) {
   switch2 = board_io__get_sw2();
 
   // Set GPIO 0 Pin 30 as a input
-  // gpio__set_as_input(switch2);
+  gpio__set_as_input(switch2);
 
-  LPC_GPIOINT->IO0IntEnR |= (1 << 30);
+  gpio0__attach_interrupt(switch2.pin_number, GPIO_INTR__FALLING_EDGE, gpio_interrupt);
 
-  lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio_interrupt, "gpio0");
+  // LPC_GPIOINT->IO0IntEnR |= (1 << 30);
+
+  lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio0__interrupt_dispatcher, "gpio0");
 
   NVIC_EnableIRQ(GPIO_IRQn);
 
@@ -87,6 +73,30 @@ int main(void) {
 
   return 0;
 }
+
+#ifdef INTERRUPT_ASSIGNMENT
+
+static void gpio_interrupt(void) {
+  fprintf(stderr, "Switch is pressed\n");
+  if (!xSemaphoreGiveFromISR(waitOnSemaphore, NULL))
+    fprintf(stderr, "Unable to Release Semaphore");
+}
+
+static void sleep_on_sem_task(void *p) {
+  while (1) {
+    if (xSemaphoreTake(waitOnSemaphore, portMAX_DELAY)) {
+      static gpio_s led3;
+      led3 = board_io__get_led3();
+      int count = 4;
+      while (count--) {
+        delay__ms(100);
+        gpio__toggle(led3);
+      }
+    }
+  }
+}
+
+#else
 
 static void create_blinky_tasks(void) {
   /**
@@ -162,3 +172,5 @@ static void uart_task(void *params) {
     printf(" %lu ticks\n\n", (xTaskGetTickCount() - ticks));
   }
 }
+
+#endif
