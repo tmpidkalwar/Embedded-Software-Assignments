@@ -21,6 +21,8 @@ static function_pointer_t gpio0_falling_edge_callbacks[32];
 static function_pointer_t gpio0_rising_edge_callbacks[32];
 
 void gpio0__attach_interrupt(uint32_t pin, gpio_interrupt_e interrupt_type, function_pointer_t callback) {
+  printf("Attaching callback function for interrupt on GPIO 0 PIN %ld\n", pin);
+  // Attaching the callback function for given pin as per the given interrupt type
   if (interrupt_type == GPIO_INTR__FALLING_EDGE) {
     gpio0_falling_edge_callbacks[pin] = callback;
     LPC_GPIOINT->IO0IntEnF |= (1 << pin);
@@ -43,6 +45,8 @@ static function_pointer_t gpio2_falling_edge_callbacks[32];
 static function_pointer_t gpio2_rising_edge_callbacks[32];
 
 void gpio2__attach_interrupt(uint32_t pin, gpio_interrupt_e interrupt_type, function_pointer_t callback) {
+  printf("Attaching callback function for interrupt on GPIO 2 PIN %ld\n", pin);
+  // Attaching the callback function for given pin as per the given interrupt type
   if (interrupt_type == GPIO_INTR__FALLING_EDGE) {
     gpio2_falling_edge_callbacks[pin] = callback;
     LPC_GPIOINT->IO2IntEnF |= (1 << pin);
@@ -119,7 +123,7 @@ void gpio__interrupt_dispatcher(void) {
     else
       attached_user_handler = gpio0_rising_edge_callbacks[gpio.pin_number];
   }
-
+  fprintf(stderr, "Dispatching to ISR fucntion corresponding to GPIO %d PIN %d\n", gpio.port_number, gpio.pin_number);
   // Invoke the user registered callback, and then clear the interrupt
   attached_user_handler();
   gpio_clear_pin_interrupt(gpio);
