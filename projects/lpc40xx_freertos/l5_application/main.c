@@ -98,10 +98,6 @@ int main(void) {
 #ifdef INTERRUPT_ASSIGNMENT
 
 void gpio_interrupt(void) {
-  // Disabling GPIO interrupt at the start of ISR and enabling back while exiting ISR
-  // This logic will avoid effect switch bouncing
-  NVIC_DisableIRQ(GPIO_IRQn);
-
   // Clear interrupt
   LPC_GPIOINT->IO0IntClr |= (1 << 30);
 
@@ -120,8 +116,6 @@ void gpio_interrupt(void) {
   if (!xSemaphoreGiveFromISR(waitOnSemaphore, NULL))
     fprintf(stderr, "Unable to Release Semaphore");
 #endif
-  // Switch Debounce logic
-  NVIC_EnableIRQ(GPIO_IRQn);
 }
 
 static void sleep_on_sem_task(void *p) {
