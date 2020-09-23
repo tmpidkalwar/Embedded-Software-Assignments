@@ -9,20 +9,131 @@
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
 
+#ifdef INTERRUPT_ASSIGNMENT
+
+#include "delay.h"
+#include "gpio_isr.h"
+#include "lpc_peripherals.h"
+#include "semphr.h"
+
+#endif
+
+#ifdef INTERRUPT_ASSIGNMENT
+
+void gpio_interrupt(void);
+static void sleep_on_sem_task(void *p);
+
+static SemaphoreHandle_t waitOnSemaphore;
+
+#else
+
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
 
+#endif
+
 int main(void) {
+
+#ifdef INTERRUPT_ASSIGNMENT
+
+#ifdef PART0_IRQ_ASSGNMT
+  // Set GPIO 0 Pin 30 as a input
+  LPC_GPIO0->DIR &= ~(1 << 30);
+  LPC_GPIOINT->IO0IntEnR |= (1 << 30);
+
+  // lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio_interrupt, "gpio0");
+
+  NVIC_EnableIRQ(GPIO_IRQn);
+
+  static gpio_s led2;
+
+  led2 = board_io__get_led2();
+  while (1) {
+    delay__ms(100);
+    gpio__toggle(led2);
+  }
+#endif
+
+#if (defined(PART1_IRQ_ASSGNMT) || defined(PART2_IRQ_ASSGNMT))
+  waitOnSemaphore = xSemaphoreCreateBinary();
+
+  // Initializing GPIO to switch 2 to configure for interrupt
+  static gpio_s switch2;
+  switch2 = board_io__get_sw2();
+
+  // Set GPIO 0 Pin 30 as a input
+  gpio__set_as_input(switch2);
+
+  NVIC_EnableIRQ(GPIO_IRQn);
+  xTaskCreate(sleep_on_sem_task, "waitOnSem", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#ifdef PART1_IRQ_ASSGNMT
+
+  LPC_GPIOINT->IO0IntEnR |= (1 << 30);
+  lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio_interrupt, "gpio0");
+
+#endif
+
+#ifdef PART2_IRQ_ASSGNMT
+
+  gpio0__attach_interrupt(switch2.pin_number, GPIO_INTR__FALLING_EDGE, gpio_interrupt);
+
+  lpc_peripheral__enable_interrupt(LPC_PERIPHERAL__GPIO, gpio__interrupt_dispatcher, "gpio_isr");
+
+#endif
+
+#else
   create_blinky_tasks();
   create_uart_task();
-
+#endif
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
 
   return 0;
 }
+
+#ifdef INTERRUPT_ASSIGNMENT
+
+void gpio_interrupt(void) {
+  // Clear interrupt
+  LPC_GPIOINT->IO0IntClr |= (1 << 30);
+
+#ifdef PART0_IRQ_ASSGNMT
+  fprintf(stderr, "Switch is pressed, Enterring ISR to blink LED3\n");
+  static gpio_s led3;
+  led3 = board_io__get_led3();
+  int count = 4;
+  while (count--) {
+    delay__ms(100);
+    gpio__toggle(led3);
+  }
+#endif
+#if (defined(PART1_IRQ_ASSGNMT) || defined(PART2_IRQ_ASSGNMT))
+  fprintf(stderr, "Switch is pressed, Will enter Semaphore Task\n");
+  if (!xSemaphoreGiveFromISR(waitOnSemaphore, NULL))
+    fprintf(stderr, "Unable to Release Semaphore");
+#endif
+}
+
+static void sleep_on_sem_task(void *p) {
+  while (1) {
+    if (xSemaphoreTake(waitOnSemaphore, portMAX_DELAY)) {
+      fprintf(stderr, "ISR gave me semaphore to enter this task\n");
+      static gpio_s led3;
+      led3 = board_io__get_led3();
+      int count = 4;
+      while (count--) {
+        delay__ms(100);
+        gpio__toggle(led3);
+      }
+    }
+  }
+}
+
+#else
 
 static void create_blinky_tasks(void) {
   /**
@@ -98,3 +209,5 @@ static void uart_task(void *params) {
     printf(" %lu ticks\n\n", (xTaskGetTickCount() - ticks));
   }
 }
+
+#endif
