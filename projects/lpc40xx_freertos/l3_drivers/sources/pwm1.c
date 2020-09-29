@@ -3,6 +3,7 @@
 #include "clock.h"
 #include "lpc40xx.h"
 #include "lpc_peripherals.h"
+#include "stdio.h"
 
 void pwm1__init_single_edge(uint32_t frequency_in_hertz) {
   const uint32_t pwm_channel_output_enable_mask = 0x3F;
@@ -15,6 +16,9 @@ void pwm1__init_single_edge(uint32_t frequency_in_hertz) {
     valid_frequency_in_hertz = default_frequency_in_hertz;
   }
   const uint32_t match_reg_value = (clock__get_peripheral_clock_hz() / valid_frequency_in_hertz);
+
+  // TODO: Remove before commiting
+  fprintf(stderr, "PWM valid freq is %ld and match reg value is %ld \n", valid_frequency_in_hertz, match_reg_value);
 
   // MR0 holds the value that Timer Counter should count upto
   // This will get us the desired PWM pulses per second
@@ -53,5 +57,10 @@ void pwm1__set_duty_cycle(pwm1_channel_e pwm1_channel, float duty_cycle_in_perce
     break;
   }
 
+#ifdef PART0_ADC_PWM_ASSGNMT
+  const uint32_t mr1_reg_val = LPC_PWM1->MR1;
+  fprintf(stderr, "Current Value of MR0 and MR1 registers are : %ld and %ld \n", mr0_reg_val, mr1_reg_val);
+
+#endif
   LPC_PWM1->LER |= (1 << (pwm1_channel + 1)); ///< Enable Latch Register
 }

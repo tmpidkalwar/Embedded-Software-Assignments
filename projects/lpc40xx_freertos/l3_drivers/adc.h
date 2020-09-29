@@ -24,3 +24,19 @@ void adc__initialize(void);
  * This starts conversion of one channel, and should not be used from multiple tasks
  */
 uint16_t adc__get_adc_value(adc_channel_e channel_num);
+
+/**
+ * Implement a new function called adc__enable_burst_mode() which will
+ * set the relevant bits in Control Register (CR) to enable burst mode.
+ */
+void adc__enable_burst_mode(void);
+
+/**
+ * Note:
+ * The existing ADC driver is designed to work for non-burst mode
+ *
+ * You will need to write a routine that reads data while the ADC is in burst mode
+ * Note that in burst mode, you will NOT read the result from the GDR register
+ * Read the LPC user manual for more details
+ */
+uint16_t adc__get_channel_reading_with_burst_mode(adc_channel_e channel_number);
