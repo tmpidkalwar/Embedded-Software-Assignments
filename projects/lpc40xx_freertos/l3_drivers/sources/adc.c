@@ -16,7 +16,7 @@ void adc__initialize(void) {
   lpc_peripheral__turn_on_power_to(LPC_PERIPHERAL__ADC);
 
   const uint32_t enable_adc_mask = (1 << 21);
-  LPC_ADC->CR = enable_adc_mask;
+  LPC_ADC->CR |= enable_adc_mask;
 
   const uint32_t max_adc_clock = (12 * 1000UL * 1000UL); // 12.4Mhz : max ADC clock in datasheet for lpc40xx
   const uint32_t adc_clock = clock__get_peripheral_clock_hz();
@@ -50,4 +50,19 @@ uint16_t adc__get_adc_value(adc_channel_e channel_num) {
   }
 
   return result;
+}
+
+void adc__enable_burst_mode(void) {
+  // Set the BURST bit in control register
+  LPC_ADC->CR |= (1 << 16);
+
+  // Clear Start bits from control register to be in burst mode
+  LPC_ADC->CR &= ~(0b111 << 24);
+}
+
+uint16_t adc__get_channel_reading_with_burst_mode(uint8_t channel_number) {
+  LPC_ADC->CR &= ~(0xFF);
+  LPC_ADC->CR |= (1 << 2);
+  uint32_t status = LPC_ADC->DR[2];
+  return ((status >> 4) & 0x0FFF);
 }

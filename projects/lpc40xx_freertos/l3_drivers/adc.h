@@ -24,3 +24,15 @@ void adc__initialize(void);
  * This starts conversion of one channel, and should not be used from multiple tasks
  */
 uint16_t adc__get_adc_value(adc_channel_e channel_num);
+
+/**
+ * This function is responsible for enabling burst mode by configuring CR register
+ */
+void adc__enable_burst_mode(void);
+
+/**
+ * Read the ADC channel values while in burst mode for a given channel
+ * @param channel_number The channel number of ADC to read the values
+ * @return read ADC values
+ */
+uint16_t adc__get_channel_reading_with_burst_mode(adc_channel_e channel_number);
