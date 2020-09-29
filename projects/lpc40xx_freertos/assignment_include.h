@@ -15,10 +15,10 @@
  * Take care to enable only one part macro enabled while compiling.
  */
 
-// Assignment 4
+// Assignment 5
 #define ADC_PWM_ASSIGNMENT
 //#define PART0_ADC_PWM_ASSGNMT
-#define PART1_ADC_PWM_ASSGNMT
-//#define PART2_ADC_PWM_ASSGNMT
+//#define PART1_ADC_PWM_ASSGNMT
+#define PART2_ADC_PWM_ASSGNMT
 
 #endif
