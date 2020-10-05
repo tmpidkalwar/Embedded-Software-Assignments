@@ -130,8 +130,17 @@ void adesto_flash_page_write(void *p) {
       adesto_flash_erase_4k_block();
       fprintf(stderr, "Starting with write operation \n");
       adesto_flash_WEL_bit_set();
+
+      // read the status
+      adesto_cs();
+      ssp2_lab_exchange_byte(0x05);
+      uint8_t status_data = ssp2_lab_exchange_byte(dummy_byte);
+      fprintf(stderr, "Current status register value is %d\n", status_data);
+      status_data = ssp2_lab_exchange_byte(dummy_byte);
+      adesto_ds();
+
       const uint8_t page_write_opcode = 0x02;
-      const uint32_t address_to_write = 0x000015;
+      const uint32_t address_to_write = 0x000000;
       const uint8_t data = 0xDA;
       // uint8_t byte_count_to_write = 4;
       adesto_cs();
@@ -150,7 +159,7 @@ void adesto_flash_page_read(void *p) {
   while (1) {
     if (xSemaphoreTake(write_read_page_mutex, 1000)) {
       uint8_t read_data = 0x00;
-      const uint32_t address_to_write = 0x000015;
+      const uint32_t address_to_write = 0x000000;
       const uint8_t page_read_opcode = 0x0B;
       adesto_cs();
       ssp2_lab_exchange_byte(page_read_opcode);
@@ -165,25 +174,25 @@ void adesto_flash_page_read(void *p) {
 }
 
 void adesto_flash_erase_4k_block(void) {
-  uint8_t status_reg_read_opcode = 0x81;
-  uint8_t status_data = 0;
+  uint8_t status_reg_read_opcode = 0x05;
+  uint8_t status_data = 0x5;
   adesto_flash_WEL_bit_set();
-  uint8_t erase_4k_block_opcode = 0x81;
+  uint8_t erase_4k_block_opcode = 0x20;
   uint32_t erase_address = 0x000000;
   adesto_cs();
   ssp2_lab_exchange_byte(erase_4k_block_opcode);
   adesto_flash_send_address(erase_address);
   adesto_ds();
-  vTaskDelay(50);
+  // vTaskDelay(50);
   // Reading flash status register
   adesto_cs();
   ssp2_lab_exchange_byte(status_reg_read_opcode);
-  // status_data = ssp2_lab_exchange_byte(dummy_byte);
-  // fprintf(stderr, "Current status register value is %d\n", status_data);
   status_data = ssp2_lab_exchange_byte(dummy_byte);
-  // do {
-  //   status_data = ssp2_lab_exchange_byte(dummy_byte);
-  // } while (status_data & (1 << 0));
+  fprintf(stderr, "Current status register value is %d\n", status_data);
+  status_data = ssp2_lab_exchange_byte(dummy_byte);
+  do {
+    status_data = ssp2_lab_exchange_byte(dummy_byte);
+  } while (status_data & (1 << 0));
   adesto_ds();
   fprintf(stderr, "after polling status register value is %d\n", status_data);
   fprintf(stderr, "Erased successfully\n");
