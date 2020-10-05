@@ -11,7 +11,17 @@
 
 #ifdef SPI_ASSIGNMENT
 
+#include "semphr.h"
 #include "ssp2_lab.h"
+
+const uint8_t dummy_byte = 0xFF;
+
+#ifdef PART2_SPI_ASSGNMT
+SemaphoreHandle_t spi_bus_mutex;
+
+void adesto_flash_page_write(void);
+uint8_t adesto_flash_page_read(void);
+#endif
 
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
@@ -34,20 +44,15 @@ typedef struct {
 // TODO: Create struct of type 'adesto_flash_id_s' and return it
 adesto_flash_id_s adesto_read_signature(void) {
   adesto_flash_id_s data = {0};
-  const uint8_t dummy_byte = 0xFF;
   const uint8_t flash_id_read_opcode = 0x9F;
   adesto_cs();
   {
     // Send the opcode to trigger manufacturing ID read from flash
     ssp2_lab_exchange_byte(flash_id_read_opcode);
     // read out the manufacturing id from Flash by sending dummy bytes
-    // ssp2_lab_exchange_byte(dummy_byte);
     data.manufacturer_id = ssp2_lab_exchange_byte(dummy_byte);
-    // ssp2_lab_exchange_byte(dummy_byte);
     data.device_id_1 = ssp2_lab_exchange_byte(dummy_byte);
-    // ssp2_lab_exchange_byte(dummy_byte);
     data.device_id_2 = ssp2_lab_exchange_byte(dummy_byte);
-    // ssp2_lab_exchange_byte(dummy_byte);
     data.extended_device_id = ssp2_lab_exchange_byte(dummy_byte);
   }
   adesto_ds();
@@ -79,16 +84,98 @@ void spi_task(void *p) {
 #ifdef PART2_SPI_ASSGNMT
 void spi_id_verification_task(void *p) {
   while (1) {
-    const adesto_flash_id_s id = adesto_read_signature();
-
-    // When we read a manufacturer ID we do not expect, we will kill this task
-    if (id.manufacturer_id != 0x1F) {
+    adesto_flash_id_s id = {0};
+    if (xSemaphoreTake(spi_bus_mutex, 1000)) {
+      id = adesto_read_signature();
+      fprintf(stderr, "id is %d\n", id.manufacturer_id);
+      xSemaphoreGive(spi_bus_mutex);
+    }
+    if (id.manufacturer_id != 0x1f) {
+      // When we read a manufacturer ID we do not expect, we will kill this task if (id.manufacturer_id != 0x1F) {
       fprintf(stderr, "Manufacturer ID read failure\n");
       vTaskSuspend(NULL); // Kill this task
     }
   }
 }
+
 #endif
+
+#ifdef PART3_SPI_ASSGNMT
+
+void adesto_flash_WEL_bit_set(void) {
+  const uint8_t wel_bit_set_opcode = 0x06;
+  adesto_cs();
+  ssp2_lab_exchange_byte(wel_bit_set_opcode);
+  adesto_ds();
+}
+
+/**
+ * Adesto flash asks to send 24-bit address
+ * We can use our usual uint32_t to store the address
+ * and then transmit this address over the SPI driver
+ * one byte at a time
+ */
+void adesto_flash_send_address(uint32_t address) {
+  (void)ssp2_lab_exchange_byte((address >> 16) & 0xFF);
+  (void)ssp2_lab_exchange_byte((address >> 8) & 0xFF);
+  (void)ssp2_lab_exchange_byte((address >> 0) & 0xFF);
+}
+
+void adesto_flash_page_write(void) {
+  adesto_flash_WEL_bit_set();
+  const uint8_t page_write_opcode = 0x02;
+  const uint32_t address_to_write = 0x000015;
+  const uint8_t data = 0xDA;
+  // uint8_t byte_count_to_write = 4;
+  adesto_cs();
+  ssp2_lab_exchange_byte(page_write_opcode);
+  adesto_flash_send_address(address_to_write);
+  ssp2_lab_exchange_byte(data);
+  adesto_ds();
+  fprintf(stderr, "write successfully\n");
+}
+
+uint8_t adesto_flash_page_read(void) {
+  uint8_t read_data = 0x00;
+  const uint32_t address_to_write = 0x000015;
+  const uint8_t page_read_opcode = 0x0B;
+  adesto_cs();
+  ssp2_lab_exchange_byte(page_read_opcode);
+  adesto_flash_send_address(address_to_write);
+  read_data = ssp2_lab_exchange_byte(dummy_byte);
+  adesto_ds();
+  fprintf(stderr, "read data %d successfully\n", read_data);
+  return read_data;
+}
+
+void adesto_flash_erase_4k_block(void) {
+  uint8_t status_reg_read_opcode = 0x81;
+  uint8_t status_data = 0;
+  adesto_flash_WEL_bit_set();
+  uint8_t erase_4k_block_opcode = 0x81;
+  uint32_t erase_address = 0x000000;
+  adesto_cs();
+  ssp2_lab_exchange_byte(erase_4k_block_opcode);
+  adesto_flash_send_address(erase_address);
+  adesto_ds();
+  vTaskDelay(50);
+  // Reading flash status register
+  adesto_cs();
+  ssp2_lab_exchange_byte(status_reg_read_opcode);
+  status_data = ssp2_lab_exchange_byte(dummy_byte);
+  fprintf(stderr, "Current status register value is %d\n", status_data);
+  while (1)
+    ;
+  status_data = ssp2_lab_exchange_byte(dummy_byte);
+  do {
+    status_data = ssp2_lab_exchange_byte(dummy_byte);
+    vTaskDelay(10);
+  } while (status_data & (1 << 7));
+  adesto_ds();
+  fprintf(stderr, "Erased successfully\n");
+}
+#endif
+
 #endif
 
 int main(void) {
@@ -100,8 +187,17 @@ int main(void) {
   xTaskCreate(spi_task, "spi", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
 #endif
 #ifdef PART2_SPI_ASSGNMT
+  spi_bus_mutex = xSemaphoreCreateMutex();
+
   xTaskCreate(spi_id_verification_task, "id_verify", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
   xTaskCreate(spi_id_verification_task, "id_verify1", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#ifdef PART3_SPI_ASSGNMT
+  adesto_flash_erase_4k_block();
+  adesto_flash_page_write();
+  uint8_t read_data = adesto_flash_page_read();
+  fprintf(stderr, "The data read from the flash is %d\n", read_data);
 #endif
 #else
   create_blinky_tasks();
