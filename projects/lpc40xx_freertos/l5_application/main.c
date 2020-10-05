@@ -11,17 +11,20 @@
 
 #ifdef SPI_ASSIGNMENT
 
+#include "delay.h"
 #include "semphr.h"
 #include "ssp2_lab.h"
 
 const uint8_t dummy_byte = 0xFF;
 
-#ifdef PART2_SPI_ASSGNMT
+//#ifdef PART2_SPI_ASSGNMT
 SemaphoreHandle_t spi_bus_mutex;
+SemaphoreHandle_t write_read_page_mutex;
 
-void adesto_flash_page_write(void);
-uint8_t adesto_flash_page_read(void);
-#endif
+void adesto_flash_page_write(void *p);
+void adesto_flash_page_read(void *p);
+void adesto_flash_erase_4k_block(void);
+//#endif
 
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
@@ -121,31 +124,44 @@ void adesto_flash_send_address(uint32_t address) {
   (void)ssp2_lab_exchange_byte((address >> 0) & 0xFF);
 }
 
-void adesto_flash_page_write(void) {
-  adesto_flash_WEL_bit_set();
-  const uint8_t page_write_opcode = 0x02;
-  const uint32_t address_to_write = 0x000015;
-  const uint8_t data = 0xDA;
-  // uint8_t byte_count_to_write = 4;
-  adesto_cs();
-  ssp2_lab_exchange_byte(page_write_opcode);
-  adesto_flash_send_address(address_to_write);
-  ssp2_lab_exchange_byte(data);
-  adesto_ds();
-  fprintf(stderr, "write successfully\n");
+void adesto_flash_page_write(void *p) {
+  while (1) {
+    if (xSemaphoreTake(write_read_page_mutex, 1000)) {
+      adesto_flash_erase_4k_block();
+      fprintf(stderr, "Starting with write operation \n");
+      adesto_flash_WEL_bit_set();
+      const uint8_t page_write_opcode = 0x02;
+      const uint32_t address_to_write = 0x000015;
+      const uint8_t data = 0xDA;
+      // uint8_t byte_count_to_write = 4;
+      adesto_cs();
+      ssp2_lab_exchange_byte(page_write_opcode);
+      adesto_flash_send_address(address_to_write);
+      ssp2_lab_exchange_byte(data);
+      adesto_ds();
+      fprintf(stderr, "write successfully\n");
+      xSemaphoreGive(write_read_page_mutex);
+    }
+    vTaskDelay(10);
+  }
 }
 
-uint8_t adesto_flash_page_read(void) {
-  uint8_t read_data = 0x00;
-  const uint32_t address_to_write = 0x000015;
-  const uint8_t page_read_opcode = 0x0B;
-  adesto_cs();
-  ssp2_lab_exchange_byte(page_read_opcode);
-  adesto_flash_send_address(address_to_write);
-  read_data = ssp2_lab_exchange_byte(dummy_byte);
-  adesto_ds();
-  fprintf(stderr, "read data %d successfully\n", read_data);
-  return read_data;
+void adesto_flash_page_read(void *p) {
+  while (1) {
+    if (xSemaphoreTake(write_read_page_mutex, 1000)) {
+      uint8_t read_data = 0x00;
+      const uint32_t address_to_write = 0x000015;
+      const uint8_t page_read_opcode = 0x0B;
+      adesto_cs();
+      ssp2_lab_exchange_byte(page_read_opcode);
+      adesto_flash_send_address(address_to_write);
+      read_data = ssp2_lab_exchange_byte(dummy_byte);
+      adesto_ds();
+      fprintf(stderr, "read data %d successfully\n", read_data);
+      xSemaphoreGive(write_read_page_mutex);
+    }
+    vTaskDelay(10);
+  }
 }
 
 void adesto_flash_erase_4k_block(void) {
@@ -162,16 +178,14 @@ void adesto_flash_erase_4k_block(void) {
   // Reading flash status register
   adesto_cs();
   ssp2_lab_exchange_byte(status_reg_read_opcode);
+  // status_data = ssp2_lab_exchange_byte(dummy_byte);
+  // fprintf(stderr, "Current status register value is %d\n", status_data);
   status_data = ssp2_lab_exchange_byte(dummy_byte);
-  fprintf(stderr, "Current status register value is %d\n", status_data);
-  while (1)
-    ;
-  status_data = ssp2_lab_exchange_byte(dummy_byte);
-  do {
-    status_data = ssp2_lab_exchange_byte(dummy_byte);
-    vTaskDelay(10);
-  } while (status_data & (1 << 7));
+  // do {
+  //   status_data = ssp2_lab_exchange_byte(dummy_byte);
+  // } while (status_data & (1 << 0));
   adesto_ds();
+  fprintf(stderr, "after polling status register value is %d\n", status_data);
   fprintf(stderr, "Erased successfully\n");
 }
 #endif
@@ -194,10 +208,14 @@ int main(void) {
 #endif
 
 #ifdef PART3_SPI_ASSGNMT
-  adesto_flash_erase_4k_block();
-  adesto_flash_page_write();
-  uint8_t read_data = adesto_flash_page_read();
-  fprintf(stderr, "The data read from the flash is %d\n", read_data);
+  // adesto_flash_erase_4k_block();
+  // adesto_flash_page_write();
+  // delay__ms(10);
+  // uint8_t read_data = adesto_flash_page_read();
+  // fprintf(stderr, "The data read from the flash is %d\n", read_data);
+  write_read_page_mutex = xSemaphoreCreateMutex();
+  xTaskCreate(adesto_flash_page_write, "page_write", 2048 / sizeof(void *), NULL, PRIORITY_MEDIUM, NULL);
+  xTaskCreate(adesto_flash_page_read, "page_read", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
 #endif
 #else
   create_blinky_tasks();
