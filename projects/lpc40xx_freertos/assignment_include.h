@@ -19,7 +19,7 @@
 #define SPI_ASSIGNMENT
 //#define PART0_SPI_ASSGNMT
 //#define PART1_SPI_ASSGNMT
-//#define PART2_SPI_ASSGNMT
-#define PART3_SPI_ASSGNMT
+#define PART2_SPI_ASSGNMT
+//#define PART3_SPI_ASSGNMT
 
 #endif
