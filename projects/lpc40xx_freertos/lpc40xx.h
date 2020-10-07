@@ -27,6 +27,8 @@
 #ifndef __LPC407x_8x_H__
 #define __LPC407x_8x_H__
 
+#include "assignment_include.h"
+
 /*
  * ==========================================================================
  * ---------- Interrupt Number Definition -----------------------------------

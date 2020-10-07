@@ -9,20 +9,130 @@
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
 
+#ifdef SPI_ASSIGNMENT
+
+#include "adesto_flash.h"
+#include "semphr.h"
+#include "ssp2_lab.h"
+
+#ifdef PART1_SPI_ASSGNMT
+void spi_task(void *p);
+#endif
+
+#ifdef PART2_SPI_ASSGNMT
+void spi_id_verification_task(void *p);
+SemaphoreHandle_t spi_bus_mutex;
+#endif
+
+#ifdef PART3_SPI_ASSGNMT
+SemaphoreHandle_t write_read_page_mutex;
+
+void flash_page_read_task(void *p);
+void flash_page_write_task(void *p);
+#endif
+
+#else
+
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
 
+#endif
+
 int main(void) {
+#ifdef SPI_ASSIGNMENT
+  // Initialize the SPI clock with given frequency
+  const uint32_t spi_clock_mhz = 6;
+  ssp2_lab_init(spi_clock_mhz);
+
+  // Configure the SPI pins
+  ssp2_configure_pin_functions();
+
+#ifdef PART1_SPI_ASSGNMT
+  xTaskCreate(spi_task, "spi", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#ifdef PART2_SPI_ASSGNMT
+  spi_bus_mutex = xSemaphoreCreateMutex();
+
+  xTaskCreate(spi_id_verification_task, "id_verify", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+  xTaskCreate(spi_id_verification_task, "id_verify1", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#ifdef PART3_SPI_ASSGNMT
+
+  write_read_page_mutex = xSemaphoreCreateMutex();
+  xTaskCreate(flash_page_write_task, "page_write", 2048 / sizeof(void *), NULL, PRIORITY_MEDIUM, NULL);
+  xTaskCreate(flash_page_read_task, "page_read", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+#else
   create_blinky_tasks();
   create_uart_task();
-
+#endif
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
 
   return 0;
 }
+
+#ifdef SPI_ASSIGNMENT
+
+#ifdef PART1_SPI_ASSGNMT
+
+void spi_task(void *p) {
+  while (1) {
+    adesto_flash_id_s id = adesto_read_signature();
+    fprintf(stderr, " Manufacturing id is: %X, %X, %X, %X\n", id.manufacturer_id, id.device_id_1, id.device_id_2,
+            id.extended_device_id);
+
+    vTaskDelay(2000);
+  }
+}
+#endif
+
+#ifdef PART2_SPI_ASSGNMT
+void spi_id_verification_task(void *p) {
+  while (1) {
+    adesto_flash_id_s id = {0};
+    if (xSemaphoreTake(spi_bus_mutex, 1000)) {
+      id = adesto_read_signature();
+      if (id.manufacturer_id != 0x1f) {
+        // When we read a manufacturer ID we do not expect, we will kill this task if (id.manufacturer_id != 0x1F) {
+        fprintf(stderr, "Manufacturer ID read failure\n");
+        vTaskSuspend(NULL); // Kill this task
+      }
+      fprintf(stderr, "Task read manufacturing id as %x\n", id.manufacturer_id);
+      xSemaphoreGive(spi_bus_mutex);
+    }
+  }
+}
+#endif
+
+#ifdef PART3_SPI_ASSGNMT
+void flash_page_read_task(void *p) {
+  while (1) {
+    if (xSemaphoreTake(write_read_page_mutex, 1000)) {
+      adesto_flash_page_read();
+      xSemaphoreGive(write_read_page_mutex);
+    }
+    vTaskDelay(500);
+  }
+}
+
+void flash_page_write_task(void *p) {
+  while (1) {
+    if (xSemaphoreTake(write_read_page_mutex, 1000)) {
+      adesto_flash_page_write();
+      xSemaphoreGive(write_read_page_mutex);
+    }
+    vTaskDelay(500);
+  }
+}
+
+#endif
+
+#else
 
 static void create_blinky_tasks(void) {
   /**
@@ -98,3 +208,4 @@ static void uart_task(void *params) {
     printf(" %lu ticks\n\n", (xTaskGetTickCount() - ticks));
   }
 }
+#endif
