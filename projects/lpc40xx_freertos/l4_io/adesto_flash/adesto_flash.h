@@ -1,9 +1,8 @@
 /**
- * @file adesto_flash.c
+ * @file adesto_flash.h
  * @author Tejas Pidkalwar
- * @date 19th Sept 2020
- * @brief This file maintains the macro defined to enable specific assignment implementation for
- *      execution, along with subparts of assignment enabling feature
+ * @date 1st Oct 2020
+ * @brief This file contains the Adesto flash configuration APIs
  */
 #ifndef _ADESTO_FLASH_
 #define _ADESTO_FLASH_

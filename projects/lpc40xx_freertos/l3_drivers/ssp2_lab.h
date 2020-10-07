@@ -1,8 +1,8 @@
 /**
- * @file
- * @author
- * @date
- * @brief
+ * @file ssp2_lab.h
+ * @author Tejas Pidkalwar
+ * @date 1st Oct 2020
+ * @brief This file contains SSP2 driver configuration APIs
  */
 
 #ifndef _SSP2_LAB_

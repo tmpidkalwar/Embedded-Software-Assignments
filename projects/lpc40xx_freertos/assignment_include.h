@@ -15,11 +15,11 @@
  * Take care to enable only one part macro enabled while compiling.
  */
 
-// Assignment 6 SPI
+// Assignment 5 SPI
 #define SPI_ASSIGNMENT
 //#define PART0_SPI_ASSGNMT
 //#define PART1_SPI_ASSGNMT
-#define PART2_SPI_ASSGNMT
-//#define PART3_SPI_ASSGNMT
+//#define PART2_SPI_ASSGNMT
+#define PART3_SPI_ASSGNMT
 
 #endif
