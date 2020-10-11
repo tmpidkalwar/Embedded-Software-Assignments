@@ -8,21 +8,141 @@
 #include "gpio.h"
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
+#include "stdlib.h"
+#include "string.h"
+
+#ifdef UART_ASSIGNMENT
+
+#include "uart_lab.h"
+
+//#define BOARD_1
+#define BOARD_2
+#ifdef BOARD_1
+static void board_1_sender_task(void *p);
+#endif
+#ifdef BOARD_2
+static void board_2_receiver_task(void *p);
+#endif
+// static void uart_read_task(void *p);
+// static void uart_write_task(void *p);
+
+#else
 
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
 
+#endif
+
 int main(void) {
+
+#ifdef UART_ASSIGNMENT
+  const uint32_t peripheral_clock = 1 * 1000 * 1000;
+  const uint32_t uart_baud_rate = 9600;
+  uart_lab__init(UART_2, peripheral_clock, uart_baud_rate);
+  uart__enable_receive_interrupt(UART_2);
+#ifdef PART2_UART_ASSGNMT
+  xTaskCreate(uart_write_task, "UART_WRITE", 2048 / sizeof(void *), NULL, PRIORITY_MEDIUM, NULL);
+  xTaskCreate(uart_read_task, "UART_READ", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#if defined(PART3_UART_ASSGNMT) && defined(BOARD_1)
+  xTaskCreate(board_1_sender_task, "board1_send", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#if defined(PART3_UART_ASSGNMT) && defined(BOARD_2)
+  xTaskCreate(board_2_receiver_task, "board2_receive", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#else
   create_blinky_tasks();
   create_uart_task();
+#endif
 
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
 
   return 0;
 }
+
+#ifdef UART_ASSIGNMENT
+
+#ifdef PART3_UART_ASSGNMT
+
+#ifdef BOARD_1
+// This task is done for you, but you should understand what this code is doing
+void board_1_sender_task(void *p) {
+  char number_as_string[16] = {0};
+
+  while (true) {
+    const int number = rand();
+    sprintf(number_as_string, "%i", number);
+
+    // Send one char at a time to the other board including terminating NULL char
+    for (int i = 0; i <= strlen(number_as_string); i++) {
+      uart_lab__polled_put(UART_2, number_as_string[i]);
+      printf("Sent: %c\n", number_as_string[i]);
+    }
+
+    printf("Sent: %i over UART to the other board\n", number);
+    vTaskDelay(3000);
+  }
+}
+#endif
+#ifdef BOARD_2
+
+void board_2_receiver_task(void *p) {
+  char number_as_string[16] = {0};
+  int counter = 0;
+
+  while (true) {
+    char byte = 0;
+    uart_lab__get_char_from_queue(&byte, portMAX_DELAY);
+    printf("Received: %c\n", byte);
+
+    // This is the last char, so print the number
+    if ('\0' == byte) {
+      number_as_string[counter] = '\0';
+      counter = 0;
+      printf("Received this number from the other board: %s\n", number_as_string);
+    }
+    // We have not yet received the NULL '\0' char, so buffer the data
+    else {
+      number_as_string[counter++] = byte;
+      // TODO: Store data to number_as_string[] array one char at a time
+      // Hint: Use counter as an index, and increment it as long as we do not reach max value of 16
+    }
+  }
+}
+
+#endif
+
+#else
+
+void uart_read_task(void *p) {
+  while (1) {
+    // TODO: Use uart_lab__polled_get() function and printf the received value
+    char read_byte = 0;
+    while (uart_lab__get_char_from_queue(&read_byte, 100)) {
+      fprintf(stderr, "The read data is %X\n", read_byte);
+    }
+    vTaskDelay(100);
+  }
+}
+
+void uart_write_task(void *p) {
+  while (1) {
+    // TODO: Use uart_lab__polled_put() function and send a value
+    const uint8_t write_byte = 0xAA;
+    while (!(uart_lab__polled_put(UART_2, write_byte))) {
+    }
+    fprintf(stderr, "The data %X is written successfully\n", write_byte);
+    vTaskDelay(100);
+  }
+}
+#endif
+#else
 
 static void create_blinky_tasks(void) {
   /**
@@ -98,3 +218,4 @@ static void uart_task(void *params) {
     printf(" %lu ticks\n\n", (xTaskGetTickCount() - ticks));
   }
 }
+#endif
