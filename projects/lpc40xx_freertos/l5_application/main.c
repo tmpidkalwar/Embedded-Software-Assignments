@@ -15,16 +15,22 @@
 
 #include "uart_lab.h"
 
-//#define BOARD_1
-#define BOARD_2
+#define CURRENT_UART_CHANNEL UART_2
+
+#ifdef PART3_UART_ASSGNMT
+#define BOARD_1
+//#define BOARD_2
 #ifdef BOARD_1
 static void board_1_sender_task(void *p);
 #endif
 #ifdef BOARD_2
 static void board_2_receiver_task(void *p);
 #endif
-// static void uart_read_task(void *p);
-// static void uart_write_task(void *p);
+#endif
+#if defined(PART2_UART_ASSGNMT) || defined(PART1_UART_ASSGNMT)
+static void uart_read_task(void *p);
+static void uart_write_task(void *p);
+#endif
 
 #else
 
@@ -38,11 +44,13 @@ static void uart_task(void *params);
 int main(void) {
 
 #ifdef UART_ASSIGNMENT
-  const uint32_t peripheral_clock = 1 * 1000 * 1000;
-  const uint32_t uart_baud_rate = 9600;
-  uart_lab__init(UART_2, peripheral_clock, uart_baud_rate);
-  uart__enable_receive_interrupt(UART_2);
-#ifdef PART2_UART_ASSGNMT
+  const uint32_t peripheral_clock = clock__get_peripheral_clock_hz();
+  const uint32_t uart_baud_rate = 115200;
+  uart_lab__init(CURRENT_UART_CHANNEL, peripheral_clock, uart_baud_rate);
+#if defined(PART2_UART_ASSGNMT) || defined(PART3_UART_ASSGNMT)
+  uart__enable_receive_interrupt(CURRENT_UART_CHANNEL);
+#endif
+#if defined(PART2_UART_ASSGNMT) || defined(PART1_UART_ASSGNMT)
   xTaskCreate(uart_write_task, "UART_WRITE", 2048 / sizeof(void *), NULL, PRIORITY_MEDIUM, NULL);
   xTaskCreate(uart_read_task, "UART_READ", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
 #endif
@@ -81,7 +89,7 @@ void board_1_sender_task(void *p) {
 
     // Send one char at a time to the other board including terminating NULL char
     for (int i = 0; i <= strlen(number_as_string); i++) {
-      uart_lab__polled_put(UART_2, number_as_string[i]);
+      uart_lab__polled_put(CURRENT_UART_CHANNEL, number_as_string[i]);
       printf("Sent: %c\n", number_as_string[i]);
     }
 
@@ -110,8 +118,6 @@ void board_2_receiver_task(void *p) {
     // We have not yet received the NULL '\0' char, so buffer the data
     else {
       number_as_string[counter++] = byte;
-      // TODO: Store data to number_as_string[] array one char at a time
-      // Hint: Use counter as an index, and increment it as long as we do not reach max value of 16
     }
   }
 }
@@ -122,23 +128,29 @@ void board_2_receiver_task(void *p) {
 
 void uart_read_task(void *p) {
   while (1) {
-    // TODO: Use uart_lab__polled_get() function and printf the received value
     char read_byte = 0;
+#ifdef PART2_UART_ASSGNMT
     while (uart_lab__get_char_from_queue(&read_byte, 100)) {
-      fprintf(stderr, "The read data is %X\n", read_byte);
+      printf("The read data is %X\n", read_byte);
     }
-    vTaskDelay(100);
+#endif
+
+#ifdef PART1_UART_ASSGNMT
+    while (!(uart_lab__polled_get(CURRENT_UART_CHANNEL, &read_byte))) {
+    }
+    printf("The read data is %X\n", read_byte);
+#endif
+    vTaskDelay(50);
   }
 }
 
 void uart_write_task(void *p) {
   while (1) {
-    // TODO: Use uart_lab__polled_put() function and send a value
     const uint8_t write_byte = 0xAA;
-    while (!(uart_lab__polled_put(UART_2, write_byte))) {
+    while (!(uart_lab__polled_put(CURRENT_UART_CHANNEL, write_byte))) {
     }
-    fprintf(stderr, "The data %X is written successfully\n", write_byte);
-    vTaskDelay(100);
+    printf("The data %X is written successfully\n", write_byte);
+    vTaskDelay(50);
   }
 }
 #endif
