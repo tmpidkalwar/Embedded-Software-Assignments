@@ -7,6 +7,31 @@
 #include "common_macros.h"
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
+#include "stdlib.h"
+#include "string.h"
+
+#ifdef UART_ASSIGNMENT
+
+#include "uart_lab.h"
+
+#define CURRENT_UART_CHANNEL UART_2
+
+#ifdef PART3_UART_ASSGNMT
+#define BOARD_1
+//#define BOARD_2
+#ifdef BOARD_1
+static void board_1_sender_task(void *p);
+#endif
+#ifdef BOARD_2
+static void board_2_receiver_task(void *p);
+#endif
+#endif
+#if defined(PART2_UART_ASSGNMT) || defined(PART1_UART_ASSGNMT)
+static void uart_read_task(void *p);
+static void uart_write_task(void *p);
+#endif
+
+#else
 
 // 'static' to make these functions 'private' to this file
 static void create_blinky_tasks(void);
@@ -14,9 +39,34 @@ static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
 
+#endif
+
 int main(void) {
+
+#ifdef UART_ASSIGNMENT
+  const uint32_t peripheral_clock = clock__get_peripheral_clock_hz();
+  const uint32_t uart_baud_rate = 115200;
+  uart_lab__init(CURRENT_UART_CHANNEL, peripheral_clock, uart_baud_rate);
+#if defined(PART2_UART_ASSGNMT) || defined(PART3_UART_ASSGNMT)
+  uart__enable_receive_interrupt(CURRENT_UART_CHANNEL);
+#endif
+#if defined(PART2_UART_ASSGNMT) || defined(PART1_UART_ASSGNMT)
+  xTaskCreate(uart_write_task, "UART_WRITE", 2048 / sizeof(void *), NULL, PRIORITY_MEDIUM, NULL);
+  xTaskCreate(uart_read_task, "UART_READ", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#if defined(PART3_UART_ASSGNMT) && defined(BOARD_1)
+  xTaskCreate(board_1_sender_task, "board1_send", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#if defined(PART3_UART_ASSGNMT) && defined(BOARD_2)
+  xTaskCreate(board_2_receiver_task, "board2_receive", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+
+#else
   create_blinky_tasks();
   create_uart_task();
+#endif
 
   // If you have the ESP32 wifi module soldered on the board, you can try uncommenting this code
   // See esp32/README.md for more details
@@ -28,6 +78,88 @@ int main(void) {
 
   return 0;
 }
+
+#ifdef UART_ASSIGNMENT
+
+#ifdef PART3_UART_ASSGNMT
+
+#ifdef BOARD_1
+// This task is done for you, but you should understand what this code is doing
+void board_1_sender_task(void *p) {
+  char number_as_string[16] = {0};
+
+  while (true) {
+    const int number = rand();
+    sprintf(number_as_string, "%i", number);
+
+    // Send one char at a time to the other board including terminating NULL char
+    for (int i = 0; i <= strlen(number_as_string); i++) {
+      uart_lab__polled_put(CURRENT_UART_CHANNEL, number_as_string[i]);
+      printf("Sent: %c\n", number_as_string[i]);
+    }
+
+    printf("Sent: %i over UART to the other board\n", number);
+    vTaskDelay(3000);
+  }
+}
+#endif
+#ifdef BOARD_2
+
+void board_2_receiver_task(void *p) {
+  char number_as_string[16] = {0};
+  int counter = 0;
+
+  while (true) {
+    char byte = 0;
+    uart_lab__get_char_from_queue(&byte, portMAX_DELAY);
+    printf("Received: %c\n", byte);
+
+    // This is the last char, so print the number
+    if ('\0' == byte) {
+      number_as_string[counter] = '\0';
+      counter = 0;
+      printf("Received this number from the other board: %s\n", number_as_string);
+    }
+    // We have not yet received the NULL '\0' char, so buffer the data
+    else {
+      number_as_string[counter++] = byte;
+    }
+  }
+}
+
+#endif
+
+#else
+
+void uart_read_task(void *p) {
+  while (1) {
+    char read_byte = 0;
+#ifdef PART2_UART_ASSGNMT
+    while (uart_lab__get_char_from_queue(&read_byte, 100)) {
+      printf("The read data is %X\n", read_byte);
+    }
+#endif
+
+#ifdef PART1_UART_ASSGNMT
+    while (!(uart_lab__polled_get(CURRENT_UART_CHANNEL, &read_byte))) {
+    }
+    printf("The read data is %X\n", read_byte);
+#endif
+    vTaskDelay(50);
+  }
+}
+
+void uart_write_task(void *p) {
+  while (1) {
+    const uint8_t write_byte = 0xAA;
+    while (!(uart_lab__polled_put(CURRENT_UART_CHANNEL, write_byte))) {
+    }
+    printf("The data %X is written successfully\n", write_byte);
+    vTaskDelay(50);
+  }
+}
+#endif
+#else
 
 static void create_blinky_tasks(void) {
   /**
@@ -103,3 +235,4 @@ static void uart_task(void *params) {
     printf(" %lu ticks\n\n", (xTaskGetTickCount() - ticks));
   }
 }
+#endif
