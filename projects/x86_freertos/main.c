@@ -29,7 +29,8 @@ void producer_task(void *p) {
 void consumer_task(void *p) {
   switch_e switch_value = switch__off;
   while (1) {
-    if (xQueueReceive(prod_to_cons_queue, &switch_value, 0)) {
+    printf("Ping from Before receiving the msg\n");
+    if (xQueueReceive(prod_to_cons_queue, &switch_value, portMAX_DELAY)) {
       printf("The data %d is received over the RTOS queue\n", switch_value);
     }
   }
@@ -47,8 +48,8 @@ void consumer_task(void *p) {
 int main(void) {
   //#ifdef PROD_CONS_ASSIGNMENT
   prod_to_cons_queue = xQueueCreate(10, sizeof(switch_e));
-  xTaskCreate(producer_task, "Producer", 2048 / sizeof(void *), NULL, PRIORITY_HIGH, NULL);
-  xTaskCreate(consumer_task, "Consumer", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+  xTaskCreate(producer_task, "Producer", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+  xTaskCreate(consumer_task, "Consumer", 2048 / sizeof(void *), NULL, PRIORITY_HIGH, NULL);
   //#else
   // xTaskCreate(cpu_utilization_print_task, "cpu", 1, NULL, PRIORITY_LOW, NULL);
   //#endif
