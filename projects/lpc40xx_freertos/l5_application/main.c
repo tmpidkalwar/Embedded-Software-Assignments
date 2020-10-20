@@ -8,47 +8,66 @@
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
 
-// 'static' to make these functions 'private' to this file
-static void create_blinky_tasks(void);
+#ifdef PROD_CONS_ASSIGNMENT
+
+static void led0_blink_task(void *p);
+static void led1_blink_task(void *p);
 static void create_uart_task(void);
-static void blink_task(void *params);
 static void uart_task(void *params);
 
+#else
+// 'static' to make these functions 'private' to this file
+static void create_blinky_tasks(void);
+static void blink_task(void *params);
+
+#endif
+
 int main(void) {
-  create_blinky_tasks();
+
+#ifdef PROD_CONS_ASSIGNMENT
+
+  xTaskCreate(led0_blink_task, "led0", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+  xTaskCreate(led1_blink_task, "led1", 2048 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+
   create_uart_task();
+#else
+  create_blinky_tasks();
 
   // If you have the ESP32 wifi module soldered on the board, you can try uncommenting this code
   // See esp32/README.md for more details
   // uart3_init();                                                                     // Also include:  uart3_init.h
   // xTaskCreate(esp32_tcp_hello_world_task, "uart3", 1000, NULL, PRIORITY_LOW, NULL); // Include esp32_task.h
-
+#endif
   puts("Starting RTOS");
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
 
   return 0;
 }
 
-static void create_blinky_tasks(void) {
-  /**
-   * Use '#if (1)' if you wish to observe how two tasks can blink LEDs
-   * Use '#if (0)' if you wish to use the 'periodic_scheduler.h' that will spawn 4 periodic tasks, one for each LED
-   */
-#if (1)
-  // These variables should not go out of scope because the 'blink_task' will reference this memory
-  static gpio_s led0, led1;
+#ifdef PROD_CONS_ASSIGNMENT
+
+void led0_blink_task(void *p) {
+  static gpio_s led0;
 
   led0 = board_io__get_led0();
-  led1 = board_io__get_led1();
+  gpio__set_as_output(led0);
+  while (1) {
+    gpio__toggle(led0);
+    fprintf(stderr, "led0\t");
+    vTaskDelay(100);
+  }
+}
 
-  xTaskCreate(blink_task, "led0", configMINIMAL_STACK_SIZE, (void *)&led0, PRIORITY_LOW, NULL);
-  xTaskCreate(blink_task, "led1", configMINIMAL_STACK_SIZE, (void *)&led1, PRIORITY_LOW, NULL);
-#else
-  const bool run_1000hz = true;
-  const size_t stack_size_bytes = 2048 / sizeof(void *); // RTOS stack size is in terms of 32-bits for ARM M4 32-bit CPU
-  periodic_scheduler__initialize(stack_size_bytes, !run_1000hz); // Assuming we do not need the high rate 1000Hz task
-  UNUSED(blink_task);
-#endif
+void led1_blink_task(void *p) {
+  static gpio_s led1;
+
+  led1 = board_io__get_led1();
+  gpio__set_as_output(led1);
+  while (1) {
+    gpio__toggle(led1);
+    fprintf(stderr, "led1\t");
+    vTaskDelay(100);
+  }
 }
 
 static void create_uart_task(void) {
@@ -61,16 +80,6 @@ static void create_uart_task(void) {
   sj2_cli__init();
   UNUSED(uart_task); // uart_task is un-used in if we are doing cli init()
 #endif
-}
-
-static void blink_task(void *params) {
-  const gpio_s led = *((gpio_s *)params); // Parameter was input while calling xTaskCreate()
-
-  // Warning: This task starts with very minimal stack, so do not use printf() API here to avoid stack overflow
-  while (true) {
-    gpio__toggle(led);
-    vTaskDelay(500);
-  }
 }
 
 // This sends periodic messages over printf() which uses system_calls.c to send them to UART0
@@ -103,3 +112,38 @@ static void uart_task(void *params) {
     printf(" %lu ticks\n\n", (xTaskGetTickCount() - ticks));
   }
 }
+#else
+
+static void create_blinky_tasks(void) {
+  /**
+   * Use '#if (1)' if you wish to observe how two tasks can blink LEDs
+   * Use '#if (0)' if you wish to use the 'periodic_scheduler.h' that will spawn 4 periodic tasks, one for each LED
+   */
+#if (1)
+  // These variables should not go out of scope because the 'blink_task' will reference this memory
+  static gpio_s led0, led1;
+
+  led0 = board_io__get_led0();
+  led1 = board_io__get_led1();
+
+  xTaskCreate(blink_task, "led0", configMINIMAL_STACK_SIZE, (void *)&led0, PRIORITY_LOW, NULL);
+  xTaskCreate(blink_task, "led1", configMINIMAL_STACK_SIZE, (void *)&led1, PRIORITY_LOW, NULL);
+#else
+  const bool run_1000hz = true;
+  const size_t stack_size_bytes = 2048 / sizeof(void *); // RTOS stack size is in terms of 32-bits for ARM M4 32-bit CPU
+  periodic_scheduler__initialize(stack_size_bytes, !run_1000hz); // Assuming we do not need the high rate 1000Hz task
+  UNUSED(blink_task);
+#endif
+}
+
+static void blink_task(void *params) {
+  const gpio_s led = *((gpio_s *)params); // Parameter was input while calling xTaskCreate()
+
+  // Warning: This task starts with very minimal stack, so do not use printf() API here to avoid stack overflow
+  while (true) {
+    gpio__toggle(led);
+    vTaskDelay(500);
+  }
+}
+
+#endif

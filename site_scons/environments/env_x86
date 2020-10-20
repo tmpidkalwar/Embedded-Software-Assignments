@@ -27,7 +27,8 @@ if osops.is_windows():
     osops.prepend_env_var(env_x86, Dir("#/toolchains/windows/mingw/bin"))
     osops.prepend_env_var(env_x86, Dir("#/toolchains/windows/ruby26/bin"))
 elif osops.is_linux():
-    pass
+    env_x86["CPPDEFINES"]="_DEFAULT_SOURCE"
+    env_x86["LIBS"] = "pthread"
 elif osops.is_macos():
     env_x86["CC"] = "clang"
 else:
