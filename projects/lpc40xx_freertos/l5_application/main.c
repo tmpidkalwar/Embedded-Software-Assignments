@@ -113,12 +113,15 @@ void producer_task(void *p) {
     read_acceler_data = acceleration__get_data();
 
     // Update average sensed values
-    avg_acceler_value.x = (avg_acceler_value.x + read_acceler_data.x) / 2;
-    avg_acceler_value.y = (avg_acceler_value.y + read_acceler_data.y) / 2;
-    avg_acceler_value.z = (avg_acceler_value.z + read_acceler_data.z) / 2;
+    avg_acceler_value.x = (avg_acceler_value.x + read_acceler_data.x);
+    avg_acceler_value.y = (avg_acceler_value.y + read_acceler_data.y);
+    avg_acceler_value.z = (avg_acceler_value.z + read_acceler_data.z);
 
     // If we are done reading 100 values, send average value to consumer task
     if (++count >= 100) {
+      avg_acceler_value.x /= 100;
+      avg_acceler_value.y /= 100;
+      avg_acceler_value.z /= 100;
       if (!xQueueSend(queue_to_cons_task, &avg_acceler_value, 300))
         fprintf(stderr, "failed to send data to consumer task\n");
       else {
