@@ -9,7 +9,7 @@
 #include "lpc_peripherals.h"
 
 /// Set to non-zero to enable debugging, and then you can use I2C__DEBUG_PRINTF()
-#define I2C__ENABLE_DEBUGGING 0
+#define I2C__ENABLE_DEBUGGING 1
 
 #if I2C__ENABLE_DEBUGGING
 #include <stdio.h>
