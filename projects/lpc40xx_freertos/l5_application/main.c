@@ -5,19 +5,48 @@
 
 #include "board_io.h"
 #include "common_macros.h"
+#include "i2c.h"
+#include "i2c_slave_function.h"
 #include "periodic_scheduler.h"
 #include "sj2_cli.h"
+
+//#define I2C_MASTER
+#define I2C_SLAVE
 
 // 'static' to make these functions 'private' to this file
 static void create_blinky_tasks(void);
 static void create_uart_task(void);
 static void blink_task(void *params);
 static void uart_task(void *params);
+static void i2c_task(void *p);
+static void pin_select_for_i2c();
+static void i2c_mt_task(void *p);
+static void i2c_slave_task(void *p);
 
 int main(void) {
-  create_blinky_tasks();
-  create_uart_task();
+#ifdef I2C_LAB_ASSGNMT
+  const uint32_t desired_i2c_bus_speed_in_hz = 100 * (1000);
+  const uint8_t i2c_slave_device_address = 0x07;
+  i2c__initialize(I2C__0, desired_i2c_bus_speed_in_hz, clock__get_peripheral_clock_hz());
+  pin_select_for_i2c();
+#ifdef I2C_SLAVE
+  i2c2__slave_init(i2c_slave_device_address);
+#ifdef I2C_LAB_ASSGNMT_PART_B
+  xTaskCreate(i2c_slave_task, "i2c_slave", 1024 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+#endif
+#ifdef I2C_MASTER
+#ifdef I2C_LAB_ASSGNMT_PART_A
+  xTaskCreate(i2c_task, "i2c", 1024 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
 
+#ifdef I2C_LAB_ASSGNMT_PART_B
+  xTaskCreate(i2c_mt_task, "I2C_MT", 1024 / sizeof(void *), NULL, PRIORITY_LOW, NULL);
+#endif
+#endif
+  // create_blinky_tasks();
+  create_uart_task();
+#endif
   // If you have the ESP32 wifi module soldered on the board, you can try uncommenting this code
   // See esp32/README.md for more details
   // uart3_init();                                                                     // Also include:  uart3_init.h
@@ -27,6 +56,130 @@ int main(void) {
   vTaskStartScheduler(); // This function never returns unless RTOS scheduler runs out of memory and fails
 
   return 0;
+}
+
+#ifdef I2C_LAB_ASSGNMT
+
+#ifdef I2C_MASTER
+
+#ifdef I2C_LAB_ASSGNMT_PART_A
+void i2c_task(void *p) {
+  while (1) {
+    if (i2c__detect(I2C__0, 0x0E)) {
+      printf("Successfully detected slave\n");
+    } else {
+      printf("Failed to detected slave\n");
+    }
+    vTaskDelay(1000);
+  }
+}
+#endif
+
+#ifdef I2C_LAB_ASSGNMT_PART_B
+
+void i2c_mt_task(void *p) {
+  const uint8_t byte_to_send = 0xA4;
+  const uint8_t clear_byte_data = 0x00;
+  uint8_t slave_data_read;
+
+  while (1) {
+    // Clearing the register 0, before writing register 1, as per slave requirement
+    if (i2c__write_slave_data(I2C__0, 0x0E, 0, &clear_byte_data, 1)) {
+      printf("Sent data %d successfully to Slave register 0\n", clear_byte_data);
+    } else {
+      printf("Failed to send data %d to slave register 0\n", clear_byte_data);
+    }
+    if (i2c__write_slave_data(I2C__0, 0x0E, 1, &byte_to_send, 1)) {
+      printf("Sent data %d successfully to Slave register 1\n", byte_to_send);
+    } else {
+      printf("Failed to send data %d to slave register 1\n", byte_to_send);
+    }
+    // if (i2c__read_slave_data(I2C__0, 0x0E, 1, &slave_data_read, 1)) {
+    //   if (slave_data_read == byte_to_send) {
+    //     printf("Successfully read data %d \n", slave_data_read);
+    //   } else {
+    //     printf("Data read is %d, which is not same as written\n", slave_data_read);
+    //   }
+    // } else {
+    //   printf("Failed to read data \n");
+    // }
+    vTaskDelay(1000);
+  }
+}
+#endif
+
+#endif
+
+#ifdef I2C_SLAVE
+#ifdef I2C_LAB_ASSGNMT_PART_B
+
+static void i2c_slave_function_handler(uint8_t register_index, uint8_t register_data) {
+  const uint8_t led0_bit_mask = (1 << 4);
+  const uint8_t led1_bit_mask = (1 << 5);
+  const uint8_t led2_bit_mask = (1 << 6);
+  const uint8_t led3_bit_mask = (1 << 7);
+  const uint8_t blink_duration_in_sec_bit_mask = (0b111);
+  gpio_s led0 = board_io__get_led0();
+  gpio_s led1 = board_io__get_led1();
+  gpio_s led2 = board_io__get_led2();
+  gpio_s led3 = board_io__get_led3();
+
+  switch (register_index) {
+  case 1:
+    printf("Toggling LEDs");
+    if (register_data & led0_bit_mask) {
+      printf(" led0");
+      gpio__toggle(led0);
+    }
+    if (register_data & led1_bit_mask) {
+      printf(" led1");
+      gpio__toggle(led1);
+    }
+    if (register_data & led2_bit_mask) {
+      printf(" led2");
+      gpio__toggle(led2);
+    }
+    if (register_data & led3_bit_mask) {
+      printf(" led3");
+      gpio__toggle(led3);
+    }
+    uint32_t blink_duration_in_ms = ((register_data >> 1) & blink_duration_in_sec_bit_mask) * 1000;
+    printf(" with gap of %ld ms\n", blink_duration_in_ms);
+    vTaskDelay(blink_duration_in_ms);
+    break;
+
+  case 0:
+    (register_data & led0_bit_mask) ? gpio__reset(led0) : gpio__set(led0);
+    (register_data & led1_bit_mask) ? gpio__reset(led1) : gpio__set(led1);
+    (register_data & led2_bit_mask) ? gpio__reset(led2) : gpio__set(led2);
+    (register_data & led3_bit_mask) ? gpio__reset(led3) : gpio__set(led3);
+    break;
+  }
+}
+
+void i2c_slave_task(void *p) {
+
+  while (1) {
+    uint8_t slave_memory_value;
+    // LED on/off register index 0
+    // i2c_slave_callback__read_memory(0, &slave_memory_value);
+    // i2c_slave_function_handler(0, slave_memory_value);
+    // LED blinking register index 1
+    i2c_slave_callback__read_memory(1, &slave_memory_value);
+    i2c_slave_function_handler(1, slave_memory_value);
+
+    vTaskDelay(100);
+  }
+}
+
+#endif
+#endif
+
+static void pin_select_for_i2c() {
+  const uint32_t i2c_function_bit = 0b100;
+  const uint32_t od_bit_mask = (1 << 10);
+  LPC_IOCON->P1_30 |= (od_bit_mask | i2c_function_bit);
+  LPC_IOCON->P1_31 |= (od_bit_mask | i2c_function_bit);
 }
 
 static void create_blinky_tasks(void) {
@@ -103,3 +256,4 @@ static void uart_task(void *params) {
     printf(" %lu ticks\n\n", (xTaskGetTickCount() - ticks));
   }
 }
+#endif
