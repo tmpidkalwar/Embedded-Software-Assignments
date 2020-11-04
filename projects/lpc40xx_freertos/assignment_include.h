@@ -15,4 +15,7 @@
  * Take care to enable only one part macro enabled while compiling.
  */
 
-#endif 
+#define I2C_LAB_ASSGNMT
+//#define I2C_LAB_ASSGNMT_PART_A
+#define I2C_LAB_ASSGNMT_PART_B
+#endif
