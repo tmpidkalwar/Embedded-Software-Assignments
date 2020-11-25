@@ -40,6 +40,45 @@ app_cli_status_e cli__task_list(app_cli__argument_t argument, sl_string_t user_i
   return APP_CLI_STATUS__SUCCESS;
 }
 
+#ifdef WATCHDOG_ASSGNMT
+
+app_cli_status_e cli__task_control(app_cli__argument_t argument, sl_string_t user_input_minus_command_name,
+                                   app_cli__print_string_function cli_output) {
+  sl_string_t s = user_input_minus_command_name;
+
+  if (sl_string__begins_with_ignore_case(s, "suspend")) {
+    sl_string__erase_first_word(s, ' ');
+    // Now try to query the tasks with the name 'led0'
+    TaskHandle_t task_handle = xTaskGetHandle(s);
+    if (NULL == task_handle) {
+      sl_string__insert_at(s, 0, "Could not find a task with name:");
+      cli_output(NULL, s);
+    } else {
+      vTaskSuspend(task_handle);
+    }
+
+  } else if (sl_string__begins_with_ignore_case(s, "resume")) {
+    sl_string__erase_first_word(s, ' ');
+
+    // Now try to query the tasks with the name 'led0'
+    TaskHandle_t task_handle = xTaskGetHandle(s);
+
+    if (NULL == task_handle) {
+      sl_string__insert_at(s, 0, "Could not find a task with name:");
+      cli_output(NULL, s);
+    } else {
+      vTaskResume(task_handle);
+    }
+
+  } else {
+    cli_output(NULL, "Did you mean to say suspend or resume?\n");
+  }
+
+  return APP_CLI_STATUS__SUCCESS;
+}
+
+#endif
+
 static void cli__task_list_print(sl_string_t output_string, app_cli__print_string_function cli_output) {
   void *unused_cli_param = NULL;
 

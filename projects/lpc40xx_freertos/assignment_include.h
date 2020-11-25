@@ -15,4 +15,6 @@
  * Take care to enable only one part macro enabled while compiling.
  */
 
-#endif 
+#define WATCHDOG_ASSGNMT
+
+#endif

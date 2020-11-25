@@ -3,7 +3,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-static void print_task_info(void);
+
 
 void cpu_utilization_print_task(void *p) {
   while (1) {
@@ -12,7 +12,7 @@ void cpu_utilization_print_task(void *p) {
   }
 }
 
-static void print_task_info(void) {
+void print_task_info(void) {
 #if (0 != configUSE_TRACE_FACILITY)
   // Enum to char : eRunning, eReady, eBlocked, eSuspended, eDeleted
   static const char *const task_status_table[] = {"running", " ready ", "blocked", "suspend", "deleted"};
